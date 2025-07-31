@@ -22,6 +22,7 @@ import {
   type AnthropicUserContentBlock,
   type AnthropicUserMessage,
 } from "./anthropic-types"
+import { validateAndCleanupToolConversations } from "./tool-conversation-cleanup"
 import { mapOpenAIStopReasonToAnthropic } from "./utils"
 
 // Payload translation
@@ -29,10 +30,13 @@ import { mapOpenAIStopReasonToAnthropic } from "./utils"
 export function translateToOpenAI(
   payload: AnthropicMessagesPayload,
 ): ChatCompletionsPayload {
+  // Clean up any incomplete tool conversations before translation
+  const cleanedMessages = validateAndCleanupToolConversations(payload.messages)
+
   return {
     model: payload.model,
     messages: translateAnthropicMessagesToOpenAI(
-      payload.messages,
+      cleanedMessages,
       payload.system,
     ),
     max_tokens: payload.max_tokens,

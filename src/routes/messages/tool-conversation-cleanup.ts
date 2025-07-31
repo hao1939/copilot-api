@@ -9,7 +9,7 @@ import type {
  * tool calls are cancelled or incomplete.
  *
  * Only removes tool_use blocks that are clearly abandoned (have subsequent
- * user messages without tool_result blocks).
+ * messages without tool_result blocks).
  *
  * @param messages The array of Anthropic messages to validate and clean
  * @returns A cleaned array with incomplete tool_use blocks removed
@@ -51,19 +51,19 @@ export function validateAndCleanupToolConversations(
       continue
     }
 
-    // Check if there are subsequent user messages after this tool_use
+    // Check if there are subsequent messages after this tool_use
     // If yes, and no tool_result was provided, the tool call was abandoned
-    let hasSubsequentUserMessage = false
+    let hasSubsequentMessage = false
     for (let i = toolInfo.messageIndex + 1; i < messages.length; i++) {
-      if (messages[i].role === "user") {
-        hasSubsequentUserMessage = true
-        break
-      }
+      // Any message after a tool_use without tool_result indicates abandonment
+      // This includes both user messages and assistant messages
+      hasSubsequentMessage = true
+      break
     }
 
-    // Only mark as abandoned if there are subsequent user messages
+    // Only mark as abandoned if there are subsequent messages
     // This preserves tool_use blocks at the end of conversations
-    if (hasSubsequentUserMessage) {
+    if (hasSubsequentMessage) {
       abandonedToolUseIds.add(toolUseId)
     }
   }
@@ -104,7 +104,7 @@ export function validateAndCleanupToolConversations(
 
 /**
  * Helper function to check if a message array contains abandoned tool conversations
- * (tool_use blocks followed by user messages without tool_result blocks)
+ * (tool_use blocks followed by any messages without tool_result blocks)
  * @param messages The array of Anthropic messages to check
  * @returns true if there are abandoned tool conversations
  */
@@ -129,17 +129,16 @@ export function hasIncompleteToolConversations(
     }
   }
 
-  // Check if any tool_use is abandoned (followed by user messages without tool_result)
+  // Check if any tool_use is abandoned (followed by any messages without tool_result)
   for (const [toolUseId, toolMessageIndex] of toolUseBlocks) {
     if (toolResultIds.has(toolUseId)) {
       continue // Has result, not abandoned
     }
 
-    // Check if there are subsequent user messages
+    // Check if there are subsequent messages
     for (let i = toolMessageIndex + 1; i < messages.length; i++) {
-      if (messages[i].role === "user") {
-        return true // Found abandoned tool call
-      }
+      // Any subsequent message indicates the tool call was abandoned
+      return true // Found abandoned tool call
     }
   }
 

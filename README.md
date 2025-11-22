@@ -42,6 +42,7 @@ A reverse-engineered proxy for the GitHub Copilot API that exposes it as an Open
 
 ## Documentation
 
+- [Contributing Guide](CONTRIBUTING.md)
 - [Gemini CLI Setup Guide](docs/GEMINI_SETUP.md)
 - [Gemini Model Configuration](docs/GEMINI_MODELS.md)
 - [Gemini Technical Specifications](docs/GEMINI_TECH_SPECS.md)

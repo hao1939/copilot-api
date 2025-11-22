@@ -244,8 +244,9 @@ describe("Gemini to OpenAI translation logic", () => {
     const openAIPayload = translateGeminiToOpenAI(geminiPayload)
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
 
-    // Should have 3 messages: user question, assistant tool_call, tool response
-    expect(openAIPayload.messages).toHaveLength(3)
+    // Should have 4 messages: user question, assistant tool_call, tool response, and appended user message
+    // (The appended user message is added because the conversation ends with a tool message)
+    expect(openAIPayload.messages).toHaveLength(4)
 
     // Check assistant message has tool_calls
     const assistantMsg = openAIPayload.messages[1]
@@ -260,6 +261,11 @@ describe("Gemini to OpenAI translation logic", () => {
     // CRITICAL: tool_call_id must match the ID from assistant's tool_calls
     expect(toolMsg.tool_call_id).toBe(assistantMsg.tool_calls?.[0].id)
     expect(toolMsg.tool_call_id).toContain("getWeather")
+
+    // Check appended user message (fix for GitHub Copilot)
+    const appendedMsg = openAIPayload.messages[3]
+    expect(appendedMsg.role).toBe("user")
+    expect(appendedMsg.content).toBe("Please continue with the next step.")
   })
 
   test("should translate toolConfig modes correctly", () => {

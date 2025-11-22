@@ -59,6 +59,16 @@ export function translateGeminiToOpenAI(
     }
   }
 
+  // GitHub Copilot does not accept conversations ending with a tool message
+  // If the last message is a tool message, append a dummy user message
+  if (messages.length > 0 && messages[messages.length - 1].role === "tool") {
+    consola.info("[Translation] Last message is a tool message, appending user message to satisfy GitHub Copilot requirements")
+    messages.push({
+      role: "user",
+      content: "Please continue with the next step.",
+    })
+  }
+
   return {
     model: "gpt-4", // Default model, will be overridden by route parameter
     messages,

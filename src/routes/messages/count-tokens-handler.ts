@@ -56,8 +56,6 @@ export async function handleCountTokens(c: Context) {
       finalTokenCount = Math.round(finalTokenCount * 1.03)
     }
 
-    consola.info("Token count:", finalTokenCount)
-
     return c.json({
       input_tokens: finalTokenCount,
     })

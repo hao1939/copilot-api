@@ -28,12 +28,6 @@ export const createChatCompletions = async (
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 
-  // Log payload size and tool count for debugging
-  if (payload.tools && payload.tools.length > 0) {
-    const payloadStr = JSON.stringify(payload)
-    consola.debug(`Sending ${payload.tools.length} tools, payload size: ${(Buffer.byteLength(payloadStr, 'utf8') / 1024).toFixed(2)} KB`)
-  }
-
   const response = await fetch(`${copilotBaseUrl(state)}/chat/completions`, {
     method: "POST",
     headers,
@@ -47,28 +41,6 @@ export const createChatCompletions = async (
       statusText: response.statusText,
       body: errorBody,
     })
-
-    // Log complete payload for debugging (truncate messages for readability)
-    consola.error("Complete payload:", JSON.stringify({
-      ...payload,
-      messages: payload.messages.map((m, i) => ({
-        role: m.role,
-        content: typeof m.content === "string"
-          ? `${m.content?.substring(0, 100)}...`
-          : m.content,
-        tool_calls: m.tool_calls?.length,
-        tool_call_id: m.tool_call_id,
-      })),
-    }, null, 2))
-
-    // Log ALL tool schemas for debugging
-    if (payload.tools && payload.tools.length > 0) {
-      consola.error(`All ${payload.tools.length} tool schemas:`)
-      payload.tools.forEach((tool, i) => {
-        consola.error(`\nTool ${i + 1}: ${tool.function.name}`)
-        consola.error(JSON.stringify(tool, null, 2))
-      })
-    }
 
     // Pass the error body to HTTPError so it can be forwarded without re-reading
     throw new HTTPError("Failed to create chat completions", response, errorBody)

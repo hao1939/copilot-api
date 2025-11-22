@@ -1,3 +1,5 @@
+import consola from "consola"
+
 import type {
   ChatCompletionChunk,
   ChatCompletionResponse,
@@ -20,12 +22,10 @@ import {
   isInlineDataPart,
   isTextPart,
 } from "./gemini-types"
-
 import {
-  validateToolsForStrictMode,
   formatValidationErrors,
+  validateToolsForStrictMode,
 } from "./schema-validator"
-import consola from "consola"
 
 // Request translation: Gemini → OpenAI
 
@@ -49,20 +49,11 @@ export function translateGeminiToOpenAI(
         `Invalid tool schema for OpenAI strict mode:\n${formatValidationErrors(validation.errors)}`,
       )
     }
-    consola.debug(`✓ All ${tools.length} tools validated successfully`)
-
-    // Log translated tools for debugging
-    consola.debug("Translated tools (first 3):")
-    for (let i = 0; i < Math.min(3, tools.length); i++) {
-      consola.debug(`Tool ${i + 1}: ${tools[i].function.name}`)
-      consola.debug(JSON.stringify(tools[i].function.parameters, null, 2).substring(0, 500))
-    }
   }
 
   // GitHub Copilot does not accept conversations ending with a tool message
   // If the last message is a tool message, append a dummy user message
   if (messages.length > 0 && messages[messages.length - 1].role === "tool") {
-    consola.info("[Translation] Last message is a tool message, appending user message to satisfy GitHub Copilot requirements")
     messages.push({
       role: "user",
       content: "Please continue with the next step.",
@@ -120,8 +111,6 @@ function translateGeminiContentsToOpenAI(
   // Second pass: Translate contents, matching function responses to call IDs
   let toolCallIdIndex = 0
 
-  consola.info(`[Translation] Processing ${contents.length} contents, generated ${toolCallIdQueue.length} tool call IDs`)
-
   for (const content of contents) {
     const role = translateGeminiRoleToOpenAI(content.role)
 
@@ -131,14 +120,12 @@ function translateGeminiContentsToOpenAI(
 
     if (functionCalls.length > 0) {
       // Assistant message with tool calls
-      consola.info(`[Translation] Found ${functionCalls.length} function calls in assistant message`)
       const textParts = content.parts.filter(isTextPart)
       const textContent = textParts.map((p) => p.text).join("\n\n") || null
 
       // Use the pre-generated IDs from the queue
       const toolCalls = functionCalls.map((fc, idx) => {
         const id = toolCallIdQueue[toolCallIdIndex]
-        consola.info(`[Translation] Mapping functionCall '${fc.functionCall.name}' to ID '${id}' (queue index ${toolCallIdIndex})`)
         toolCallIdIndex++
 
         return {
@@ -156,14 +143,8 @@ function translateGeminiContentsToOpenAI(
         content: textContent,
         tool_calls: toolCalls,
       })
-
-      // Debug: log tool_calls structure
-      if (toolCalls.length > 0) {
-        consola.info("Assistant message tool_calls:", JSON.stringify(toolCalls[0], null, 2))
-      }
     } else if (functionResponses.length > 0) {
       // Tool response messages
-      consola.info(`[Translation] Found ${functionResponses.length} function responses`)
       // IMPORTANT: Deduplicate function responses by their ID
       // Gemini-CLI sometimes sends duplicate functionResponse entries with the same ID
       // which would create invalid OpenAI conversation format (multiple tool messages for one tool call)
@@ -175,7 +156,6 @@ function translateGeminiContentsToOpenAI(
 
         // Skip if we've already seen this ID
         if (responseId && seenIds.has(responseId)) {
-          consola.info(`[Translation] Skipping duplicate functionResponse with ID '${responseId}'`)
           continue
         }
 
@@ -187,7 +167,6 @@ function translateGeminiContentsToOpenAI(
         // We match responses to calls in order
         const queueIndex = toolCallIdIndex - functionResponses.length + responseIndex
         const toolCallId = toolCallIdQueue[queueIndex]
-        consola.info(`[Translation] Mapping functionResponse '${fr.functionResponse.name}' (gemini ID: ${responseId}) to tool_call_id '${toolCallId}' (queue index ${queueIndex})`)
         responseIndex++
 
         messages.push({
@@ -552,12 +531,6 @@ function translateChoiceToCandidate(
   }
 
   const geminiFinishReason = translateOpenAIFinishReasonToGemini(choice.finish_reason)
-
-  // Log when finish_reason is translated to something unexpected
-  if (geminiFinishReason === "OTHER" || geminiFinishReason === undefined) {
-    console.log(`[DEBUG] OpenAI finish_reason: ${choice.finish_reason} → Gemini: ${geminiFinishReason}`)
-    console.log(`[DEBUG] Has tool_calls: ${!!choice.message.tool_calls}`)
-  }
 
   return {
     content: {

@@ -27,14 +27,6 @@ export async function handleGenerateContent(c: Context) {
     return c.json({ error: "Invalid JSON in request body" }, 400)
   }
 
-  consola.debug("Gemini request payload:", JSON.stringify(geminiPayload))
-
-  // Log tools if present to debug parameter schema issue
-  if (geminiPayload.tools && geminiPayload.tools.length > 0) {
-    consola.info("Raw Gemini tools from request:")
-    consola.info(JSON.stringify(geminiPayload.tools, null, 2))
-  }
-
   // Validate required fields
   if (!geminiPayload.contents || !Array.isArray(geminiPayload.contents)) {
     consola.error("Missing or invalid 'contents' field in request")
@@ -61,10 +53,7 @@ export async function handleGenerateContent(c: Context) {
   }
 
   // Validate that the model is a supported Gemini model
-  const SUPPORTED_GEMINI_MODELS = [
-    "gemini-2.5-pro",
-    "gemini-3-pro-preview",
-  ]
+  const SUPPORTED_GEMINI_MODELS = ["gemini-2.5-pro", "gemini-3-pro-preview"]
 
   if (!SUPPORTED_GEMINI_MODELS.includes(model)) {
     consola.error(`Unsupported Gemini model requested: ${model}`)
@@ -79,8 +68,6 @@ export async function handleGenerateContent(c: Context) {
     )
   }
 
-  consola.debug("Extracted model from path:", model)
-
   // Detect if streaming is requested
   const isStreaming = path.includes("streamGenerateContent")
 
@@ -88,17 +75,6 @@ export async function handleGenerateContent(c: Context) {
     const openAIPayload = translateGeminiToOpenAI(geminiPayload)
     openAIPayload.model = model
     openAIPayload.stream = isStreaming
-
-    consola.debug(
-      "Translated OpenAI request payload:",
-      JSON.stringify(openAIPayload),
-    )
-
-    // Log tools in detail if present
-    if (openAIPayload.tools && openAIPayload.tools.length > 0) {
-      consola.info(`Request includes ${openAIPayload.tools.length} tool(s)`)
-      consola.info("Tools:", JSON.stringify(openAIPayload.tools, null, 2))
-    }
 
     if (state.manualApprove) {
       await awaitApproval()
@@ -108,29 +84,13 @@ export async function handleGenerateContent(c: Context) {
 
     // Non-streaming response
     if (isNonStreaming(response)) {
-      consola.debug(
-        "Non-streaming response from Copilot:",
-        JSON.stringify(response).slice(-400),
-      )
       const geminiResponse = translateOpenAIToGemini(response)
-      consola.debug(
-        "Translated Gemini response:",
-        JSON.stringify(geminiResponse),
-      )
       return c.json(geminiResponse)
     }
 
     // Streaming response
-    consola.debug("Streaming response from Copilot")
-    consola.info("Starting SSE stream for Gemini")
     return streamSSE(c, async (stream) => {
-      consola.info("Inside streamSSE callback, about to iterate")
-      let eventCount = 0
       for await (const rawEvent of response) {
-        eventCount++
-        consola.info(`Received event #${eventCount}`)
-        consola.debug("Copilot raw stream event:", JSON.stringify(rawEvent))
-
         if (rawEvent.data === "[DONE]") {
           break
         }
@@ -143,24 +103,23 @@ export async function handleGenerateContent(c: Context) {
           const chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
           const geminiChunk = translateOpenAIToGemini(chunk)
 
-          consola.debug("Translated Gemini chunk:", JSON.stringify(geminiChunk))
-
           // Send as SSE data event
           await stream.writeSSE({
             data: JSON.stringify(geminiChunk),
           })
-          consola.info(`Sent Gemini chunk #${eventCount}`)
         } catch (error) {
           consola.error("Error parsing stream chunk:", error)
         }
       }
-      consola.info(`Stream complete. Total events: ${eventCount}`)
     })
   } catch (error) {
     consola.error("=== ERROR CAUGHT IN HANDLER ===")
     consola.error("Error processing request:", error)
     consola.error("Error type:", error?.constructor?.name)
-    consola.error("Error message:", error instanceof Error ? error.message : String(error))
+    consola.error(
+      "Error message:",
+      error instanceof Error ? error.message : String(error),
+    )
 
     // Log stack trace if available
     if (error instanceof Error && error.stack) {
@@ -169,11 +128,18 @@ export async function handleGenerateContent(c: Context) {
 
     // If it's an HTTPError from Copilot, get more details
     if (error instanceof Error && "response" in error) {
-      const httpError = error as { response: Response; message: string; responseBody?: string }
+      const httpError = error as {
+        response: Response
+        message: string
+        responseBody?: string
+      }
 
       // Try to use cached responseBody first (from HTTPError)
       let errorBody: string
-      if ("responseBody" in httpError && typeof httpError.responseBody === "string") {
+      if (
+        "responseBody" in httpError
+        && typeof httpError.responseBody === "string"
+      ) {
         errorBody = httpError.responseBody
         consola.error("Copilot API error body (from HTTPError):", errorBody)
       } else {

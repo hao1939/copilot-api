@@ -91,9 +91,36 @@ export async function handleGenerateContent(c: Context) {
   }
 
   // Streaming response
+  return handleGeminiStream(c, response)
+}
+
+function handleGeminiStream(
+  c: Context,
+  response: AsyncIterable<{ data: string }>,
+) {
   return streamSSE(c, async (stream) => {
+    let lastFinishReason: string | undefined
+
     for await (const rawEvent of response) {
       if (rawEvent.data === "[DONE]") {
+        // CRITICAL: Send a final completion chunk to signal stream end
+        // The Gemini CLI client waits for a chunk with finishReason set
+        // Without this, the client will hang indefinitely waiting for completion
+        if (!lastFinishReason) {
+          await stream.writeSSE({
+            data: JSON.stringify({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          })
+        }
         break
       }
 
@@ -105,10 +132,26 @@ export async function handleGenerateContent(c: Context) {
         const chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
         const geminiChunk = translateOpenAIToGemini(chunk)
 
-        // Send as SSE data event
-        await stream.writeSSE({
-          data: JSON.stringify(geminiChunk),
-        })
+        // Track if we've sent a finishReason
+        if (
+          geminiChunk.candidates[0]?.finishReason
+          && geminiChunk.candidates[0].finishReason
+            !== "FINISH_REASON_UNSPECIFIED"
+        ) {
+          lastFinishReason = geminiChunk.candidates[0].finishReason
+        }
+
+        // Only send chunks that have content (non-empty parts) or a finish reason
+        // This prevents sending empty chunks that could confuse the client
+        if (
+          geminiChunk.candidates[0]?.content?.parts?.length > 0
+          || geminiChunk.candidates[0]?.finishReason
+        ) {
+          // Send as SSE data event
+          await stream.writeSSE({
+            data: JSON.stringify(geminiChunk),
+          })
+        }
       } catch {
         // Ignore parsing errors in stream
       }

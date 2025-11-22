@@ -496,6 +496,10 @@ function translateChunkToGemini(
     }
   }
 
+  const translatedFinishReason = translateOpenAIFinishReasonToGemini(
+    choice.finish_reason,
+  )
+
   return {
     candidates: [
       {
@@ -503,7 +507,10 @@ function translateChunkToGemini(
           role: "model",
           parts,
         },
-        finishReason: translateOpenAIFinishReasonToGemini(choice.finish_reason),
+        // Only include finishReason if it's defined
+        ...(translatedFinishReason !== undefined && {
+          finishReason: translatedFinishReason,
+        }),
       },
     ],
     usageMetadata:
@@ -580,7 +587,7 @@ function translateOpenAIFinishReasonToGemini(
       return "SAFETY"
     }
     case null: {
-      // null finish_reason during streaming - don't set a finish reason yet
+      // null finish_reason during streaming - don't include finish reason
       return undefined
     }
     default: {

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test"
+
 import type { GeminiGenerateContentPayload } from "~/routes/gemini/gemini-types"
-import { translateGeminiToOpenAI, translateOpenAIToGemini } from "~/routes/gemini/translation"
 import type { ChatCompletionResponse } from "~/services/copilot/create-chat-completions"
+
+import {
+  translateGeminiToOpenAI,
+  translateOpenAIToGemini,
+} from "~/routes/gemini/translation"
 
 describe("Gemini Response Format Translation", () => {
   it("should translate responseMimeType=application/json without schema to json_object", () => {
@@ -106,10 +111,14 @@ describe("Gemini Response Format Translation", () => {
     // Check all nested objects have additionalProperties: false
     expect(schema.additionalProperties).toBe(false)
     expect(schema.properties.user.additionalProperties).toBe(false)
-    expect(schema.properties.user.properties.profile.additionalProperties).toBe(false)
+    expect(schema.properties.user.properties.profile.additionalProperties).toBe(
+      false,
+    )
 
     // Integer types should be preserved
-    expect(schema.properties.user.properties.profile.properties.age.type).toBe("integer")
+    expect(schema.properties.user.properties.profile.properties.age.type).toBe(
+      "integer",
+    )
   })
 
   it("should return undefined when no response format specified", () => {
@@ -243,4 +252,3 @@ describe("OpenAI Response Format to Gemini Translation", () => {
     })
   })
 })
-

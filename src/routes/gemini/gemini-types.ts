@@ -48,7 +48,7 @@ export interface GeminiFunctionCallPart {
 
 export interface GeminiFunctionResponsePart {
   functionResponse: {
-    id?: string  // Optional ID added by gemini-cli for tracking responses
+    id?: string // Optional ID added by gemini-cli for tracking responses
     name: string
     response: Record<string, unknown>
   }
@@ -144,7 +144,9 @@ export function isTextPart(part: GeminiPart): part is GeminiTextPart {
   return "text" in part
 }
 
-export function isInlineDataPart(part: GeminiPart): part is GeminiInlineDataPart {
+export function isInlineDataPart(
+  part: GeminiPart,
+): part is GeminiInlineDataPart {
   return "inlineData" in part
 }
 

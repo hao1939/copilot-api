@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test"
+
 import {
   validateSchemaForStrictMode,
   validateToolsForStrictMode,
@@ -44,7 +45,9 @@ describe("Schema Validator", () => {
 
       const result = validateSchemaForStrictMode(schema)
       expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.message.includes("properties"))).toBe(true)
+      expect(result.errors.some((e) => e.message.includes("properties"))).toBe(
+        true,
+      )
     })
 
     it("should reject array schema without items", () => {
@@ -77,7 +80,9 @@ describe("Schema Validator", () => {
 
       const result = validateSchemaForStrictMode(schema)
       expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.message.includes("nullable"))).toBe(true)
+      expect(result.errors.some((e) => e.message.includes("nullable"))).toBe(
+        true,
+      )
     })
 
     it("should reject schema with $ref", () => {

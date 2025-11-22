@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import { Hono } from "hono"
 
 import { geminiRoute } from "../src/routes/gemini/route"
@@ -8,11 +8,14 @@ describe("Gemini API endpoint tests", () => {
   app.route("/", geminiRoute)
 
   test("should return 400 for missing contents field", async () => {
-    const res = await app.request("/v1beta/models/gemini-2.5-pro:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}), // Missing contents
-    })
+    const res = await app.request(
+      "/v1beta/models/gemini-2.5-pro:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // Missing contents
+      },
+    )
 
     expect(res.status).toBe(400)
     const body = await res.json()
@@ -21,11 +24,14 @@ describe("Gemini API endpoint tests", () => {
   })
 
   test("should return 400 for invalid JSON", async () => {
-    const res = await app.request("/v1beta/models/gemini-2.5-pro:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "invalid json{",
-    })
+    const res = await app.request(
+      "/v1beta/models/gemini-2.5-pro:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "invalid json{",
+      },
+    )
 
     expect(res.status).toBe(400)
     const body = await res.json()
@@ -33,18 +39,21 @@ describe("Gemini API endpoint tests", () => {
   })
 
   test("should accept valid request with minimal fields", async () => {
-    const res = await app.request("/v1beta/models/gemini-2.5-pro:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: "Hello" }],
-          },
-        ],
-      }),
-    })
+    const res = await app.request(
+      "/v1beta/models/gemini-2.5-pro:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "Hello" }],
+            },
+          ],
+        }),
+      },
+    )
 
     // Should not be 400 - might be 500 if Copilot token not found, or 200 if it works
     expect(res.status).not.toBe(400)
@@ -69,18 +78,21 @@ describe("Gemini API endpoint tests", () => {
   })
 
   test("should handle streaming endpoint", async () => {
-    const res = await app.request("/v1beta/models/gemini-2.5-pro:streamGenerateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: "Hello" }],
-          },
-        ],
-      }),
-    })
+    const res = await app.request(
+      "/v1beta/models/gemini-2.5-pro:streamGenerateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "Hello" }],
+            },
+          ],
+        }),
+      },
+    )
 
     expect(res.status).not.toBe(404) // Route should exist
     expect(res.status).not.toBe(400) // Request should be valid
@@ -111,7 +123,11 @@ describe("Gemini API endpoint tests", () => {
 
   test("should reject unsupported Gemini models", async () => {
     // Test with unsupported model names
-    const unsupportedModels = ["gemini-2.5-flash-lite", "gemini-1.5-pro", "gemini-ultra"]
+    const unsupportedModels = [
+      "gemini-2.5-flash-lite",
+      "gemini-1.5-pro",
+      "gemini-ultra",
+    ]
 
     for (const model of unsupportedModels) {
       const res = await app.request(`/v1beta/models/${model}:generateContent`, {

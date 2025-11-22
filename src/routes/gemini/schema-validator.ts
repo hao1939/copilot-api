@@ -19,7 +19,7 @@ export interface ValidationError {
 
 export interface ValidationResult {
   valid: boolean
-  errors: ValidationError[]
+  errors: Array<ValidationError>
 }
 
 /**
@@ -29,7 +29,7 @@ export function validateSchemaForStrictMode(
   schema: unknown,
   path: string = "root",
 ): ValidationResult {
-  const errors: ValidationError[] = []
+  const errors: Array<ValidationError> = []
 
   // Check for null or undefined at the top level
   if (schema === null || schema === undefined) {
@@ -69,7 +69,8 @@ export function validateSchemaForStrictMode(
     if (schemaObj.additionalProperties !== false) {
       errors.push({
         path,
-        message: 'Object type must have "additionalProperties: false" for strict mode',
+        message:
+          'Object type must have "additionalProperties: false" for strict mode',
         schema: schemaObj,
       })
     }
@@ -78,7 +79,8 @@ export function validateSchemaForStrictMode(
     if (!("properties" in schemaObj)) {
       errors.push({
         path,
-        message: 'Object type must have a "properties" field (can be empty object)',
+        message:
+          'Object type must have a "properties" field (can be empty object)',
         schema: schemaObj,
       })
     } else {
@@ -86,7 +88,10 @@ export function validateSchemaForStrictMode(
       const properties = schemaObj.properties as Record<string, unknown>
       if (typeof properties === "object" && properties !== null) {
         for (const [propKey, propValue] of Object.entries(properties)) {
-          const propResult = validateSchemaForStrictMode(propValue, `${path}.properties.${propKey}`)
+          const propResult = validateSchemaForStrictMode(
+            propValue,
+            `${path}.properties.${propKey}`,
+          )
           errors.push(...propResult.errors)
         }
       }
@@ -96,18 +101,17 @@ export function validateSchemaForStrictMode(
     if (Array.isArray(schemaObj.required)) {
       const properties = schemaObj.properties as Record<string, unknown>
       for (const requiredField of schemaObj.required) {
-        if (typeof requiredField === "string") {
-          if (
-            !properties ||
-            typeof properties !== "object" ||
-            !(requiredField in properties)
-          ) {
-            errors.push({
-              path,
-              message: `Required field "${requiredField}" not found in properties`,
-              schema: schemaObj,
-            })
-          }
+        if (
+          typeof requiredField === "string"
+          && (!properties
+            || typeof properties !== "object"
+            || !(requiredField in properties))
+        ) {
+          errors.push({
+            path,
+            message: `Required field "${requiredField}" not found in properties`,
+            schema: schemaObj,
+          })
         }
       }
     }
@@ -123,7 +127,10 @@ export function validateSchemaForStrictMode(
       })
     } else {
       // Validate items schema
-      const itemsResult = validateSchemaForStrictMode(schemaObj.items, `${path}.items`)
+      const itemsResult = validateSchemaForStrictMode(
+        schemaObj.items,
+        `${path}.items`,
+      )
       errors.push(...itemsResult.errors)
     }
   }
@@ -168,11 +175,9 @@ export function validateToolsForStrictMode(
     }
   }>,
 ): ValidationResult {
-  const errors: ValidationError[] = []
+  const errors: Array<ValidationError> = []
 
-  for (let i = 0; i < tools.length; i++) {
-    const tool = tools[i]
-
+  for (const [i, tool] of tools.entries()) {
     if (tool.type !== "function") {
       errors.push({
         path: `tools[${i}].type`,
@@ -209,14 +214,14 @@ export function validateToolsForStrictMode(
 /**
  * Formats validation errors into a human-readable string.
  */
-export function formatValidationErrors(errors: ValidationError[]): string {
+export function formatValidationErrors(errors: Array<ValidationError>): string {
   if (errors.length === 0) return "No validation errors"
 
   return errors
     .map((error, i) => {
       let msg = `${i + 1}. [${error.path}] ${error.message}`
       if (error.schema) {
-        msg += `\n   Schema: ${JSON.stringify(error.schema).substring(0, 100)}...`
+        msg += `\n   Schema: ${JSON.stringify(error.schema).slice(0, 100)}...`
       }
       return msg
     })

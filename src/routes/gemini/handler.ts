@@ -21,7 +21,7 @@ export async function handleGenerateContent(c: Context) {
   let geminiPayload: GeminiGenerateContentPayload
   try {
     geminiPayload = await c.req.json<GeminiGenerateContentPayload>()
-  } catch (error) {
+  } catch {
     return c.json(
       {
         error: {

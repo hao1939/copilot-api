@@ -574,6 +574,11 @@ function translateOpenAIFinishReasonToGemini(
   | "RECITATION"
   | "OTHER"
   | undefined {
+  // Handle null or undefined (streaming in progress) using == to catch both
+  if (finishReason == null) {
+    return undefined
+  }
+
   switch (finishReason) {
     case "stop":
     case "tool_calls": {
@@ -585,10 +590,6 @@ function translateOpenAIFinishReasonToGemini(
     }
     case "content_filter": {
       return "SAFETY"
-    }
-    case null: {
-      // null finish_reason during streaming - don't include finish reason
-      return undefined
     }
     default: {
       return "OTHER"

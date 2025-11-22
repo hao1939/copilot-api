@@ -432,6 +432,48 @@ describe("OpenAI to Gemini response translation", () => {
     }
   })
 
+  test("should handle null and undefined finish_reason in streaming chunks", () => {
+    // Test null finish_reason
+    const nullChunk: ChatCompletionChunk = {
+      id: "test",
+      object: "chat.completion.chunk",
+      created: 123,
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          delta: { content: "Hello" },
+          logprobs: null,
+          finish_reason: null,
+        },
+      ],
+    }
+
+    const nullResult = translateOpenAIToGemini(nullChunk)
+    // When finish_reason is null, finishReason should not be included in the response
+    expect(nullResult.candidates[0].finishReason).toBeUndefined()
+
+    // Test undefined finish_reason (TypeScript allows this at runtime)
+    const undefinedChunk = {
+      id: "test",
+      object: "chat.completion.chunk" as const,
+      created: 123,
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          delta: { content: "Hello" },
+          logprobs: null,
+          finish_reason: undefined as any,
+        },
+      ],
+    }
+
+    const undefinedResult = translateOpenAIToGemini(undefinedChunk)
+    // When finish_reason is undefined, finishReason should not be included in the response
+    expect(undefinedResult.candidates[0].finishReason).toBeUndefined()
+  })
+
   describe("GitHub Copilot conversation ending requirements", () => {
     test("should append user message when conversation ends with tool message", () => {
       // This is the main fix: GitHub Copilot rejects conversations ending with tool messages

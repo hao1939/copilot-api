@@ -429,4 +429,470 @@ describe("OpenAI to Gemini response translation", () => {
       expect(result.candidates[0].finishReason).toBe(gemini)
     }
   })
+
+  describe("GitHub Copilot conversation ending requirements", () => {
+    test("should append user message when conversation ends with tool message", () => {
+      // This is the main fix: GitHub Copilot rejects conversations ending with tool messages
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "What's the weather?" }],
+          },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  name: "getWeather",
+                  args: { location: "SF" },
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  name: "getWeather",
+                  response: { temperature: 75 },
+                },
+              },
+            ],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have 4 messages: user, assistant+tool_calls, tool, appended user
+      expect(openAIPayload.messages).toHaveLength(4)
+
+      // Verify the appended user message
+      const lastMessage = openAIPayload.messages[3]
+      expect(lastMessage.role).toBe("user")
+      expect(lastMessage.content).toBe("Please continue with the next step.")
+    })
+
+    test("should NOT append user message when ending with user message", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello" }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "Hi!" }],
+          },
+          {
+            role: "user",
+            parts: [{ text: "How are you?" }],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have exactly 3 messages, no extra appended
+      expect(openAIPayload.messages).toHaveLength(3)
+      expect(openAIPayload.messages[2].role).toBe("user")
+      expect(openAIPayload.messages[2].content).toBe("How are you?")
+    })
+
+    test("should NOT append user message when ending with assistant message", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello" }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "Hi there!" }],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have exactly 2 messages, no extra appended
+      expect(openAIPayload.messages).toHaveLength(2)
+      expect(openAIPayload.messages[1].role).toBe("assistant")
+      expect(openAIPayload.messages[1].content).toBe("Hi there!")
+    })
+
+    test("should handle multiple tool calls ending with tool response", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Get weather and time" }],
+          },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  name: "getWeather",
+                  args: {},
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  name: "getWeather",
+                  response: { temp: 75 },
+                },
+              },
+            ],
+          },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: {
+                  name: "getTime",
+                  args: {},
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  name: "getTime",
+                  response: { time: "3pm" },
+                },
+              },
+            ],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should append user message since last message is tool response
+      const lastMessage = openAIPayload.messages[openAIPayload.messages.length - 1]
+      expect(lastMessage.role).toBe("user")
+      expect(lastMessage.content).toBe("Please continue with the next step.")
+
+      // Second to last should be tool
+      const secondLast = openAIPayload.messages[openAIPayload.messages.length - 2]
+      expect(secondLast.role).toBe("tool")
+    })
+
+    test("should preserve consecutive user messages (GitHub Copilot supports this)", () => {
+      // During debugging we confirmed GitHub Copilot DOES accept consecutive user messages
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "First" }],
+          },
+          {
+            role: "user",
+            parts: [{ text: "Second" }],
+          },
+          {
+            role: "user",
+            parts: [{ text: "Third" }],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have 3 consecutive user messages (not merged)
+      expect(openAIPayload.messages).toHaveLength(3)
+      expect(openAIPayload.messages[0].role).toBe("user")
+      expect(openAIPayload.messages[0].content).toBe("First")
+      expect(openAIPayload.messages[1].role).toBe("user")
+      expect(openAIPayload.messages[1].content).toBe("Second")
+      expect(openAIPayload.messages[2].role).toBe("user")
+      expect(openAIPayload.messages[2].content).toBe("Third")
+    })
+
+    test("should handle empty messages array", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should not crash, should return empty messages
+      expect(openAIPayload.messages).toHaveLength(0)
+    })
+
+    test("should handle conversation with only system message", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [],
+        systemInstruction: {
+          role: "user",
+          parts: [{ text: "You are a helpful assistant" }],
+        },
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have only system message, no appended user message
+      expect(openAIPayload.messages).toHaveLength(1)
+      expect(openAIPayload.messages[0].role).toBe("system")
+    })
+  })
+
+  describe("Gemini API Features", () => {
+    test("should translate systemInstruction to OpenAI system message", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        systemInstruction: {
+          role: "system",
+          parts: [
+            {
+              text: "You are a helpful assistant specialized in coding.",
+            },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Should have 2 messages: system and user
+      expect(openAIPayload.messages).toHaveLength(2)
+      expect(openAIPayload.messages[0].role).toBe("system")
+      expect(openAIPayload.messages[0].content).toBe(
+        "You are a helpful assistant specialized in coding.",
+      )
+      expect(openAIPayload.messages[1].role).toBe("user")
+      expect(openAIPayload.messages[1].content).toBe("Hello!")
+    })
+
+    test("should translate systemInstruction with multiple text parts", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        systemInstruction: {
+          role: "system",
+          parts: [
+            { text: "You are a helpful assistant." },
+            { text: "You specialize in coding." },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // Multiple text parts should be concatenated with double newlines
+      expect(openAIPayload.messages[0].role).toBe("system")
+      expect(openAIPayload.messages[0].content).toBe(
+        "You are a helpful assistant.\n\nYou specialize in coding.",
+      )
+    })
+
+    test("should translate generationConfig to OpenAI parameters", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          topP: 0.9,
+          maxOutputTokens: 1024,
+          stopSequences: ["END", "STOP"],
+        },
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      expect(openAIPayload.temperature).toBe(0.7)
+      expect(openAIPayload.top_p).toBe(0.9)
+      expect(openAIPayload.max_tokens).toBe(1024)
+      expect(openAIPayload.stop).toEqual(["END", "STOP"])
+    })
+
+    test("should handle stopSequences as array", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "Hello!" }],
+          },
+        ],
+        generationConfig: {
+          stopSequences: ["END"],
+        },
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      // OpenAI accepts both string and array for stop
+      expect(openAIPayload.stop).toEqual(["END"])
+    })
+
+    test("should handle inlineData parts (images)", () => {
+      const geminiPayload: GeminiGenerateContentPayload = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: "What's in this image?" },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: "base64encodeddata",
+                },
+              },
+            ],
+          },
+        ],
+      }
+
+      const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+
+      expect(openAIPayload.messages).toHaveLength(1)
+      expect(Array.isArray(openAIPayload.messages[0].content)).toBe(true)
+
+      const content = openAIPayload.messages[0].content as Array<{
+        type: string
+        [key: string]: unknown
+      }>
+      expect(content).toHaveLength(2)
+      expect(content[0].type).toBe("text")
+      expect(content[1].type).toBe("image_url")
+      expect(content[1].image_url).toEqual({
+        url: "data:image/png;base64,base64encodeddata",
+      })
+    })
+  })
+
+  describe("OpenAI to Gemini response features", () => {
+    test("should translate response with safety ratings", () => {
+      const openAIResponse: ChatCompletionResponse = {
+        id: "chatcmpl-123",
+        object: "chat.completion",
+        created: 1234567890,
+        model: "gemini-2.5-pro",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "This is a safe response.",
+              tool_calls: undefined,
+            },
+            logprobs: null,
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      }
+
+      const geminiResponse = translateOpenAIToGemini(openAIResponse)
+
+      expect(geminiResponse.candidates).toHaveLength(1)
+      expect(geminiResponse.candidates[0].content.role).toBe("model")
+      expect(geminiResponse.candidates[0].content.parts).toHaveLength(1)
+      expect(geminiResponse.candidates[0].content.parts[0]).toEqual({
+        text: "This is a safe response.",
+      })
+      expect(geminiResponse.candidates[0].finishReason).toBe("STOP")
+
+      // Verify usage metadata
+      expect(geminiResponse.usageMetadata).toBeDefined()
+      expect(geminiResponse.usageMetadata?.promptTokenCount).toBe(10)
+      expect(geminiResponse.usageMetadata?.candidatesTokenCount).toBe(20)
+      expect(geminiResponse.usageMetadata?.totalTokenCount).toBe(30)
+    })
+
+    test("should handle streaming response with finish_reason", () => {
+      const openAIChunk: ChatCompletionChunk = {
+        id: "chatcmpl-123",
+        object: "chat.completion.chunk",
+        created: 1234567890,
+        model: "gemini-2.5-pro",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: "Hello",
+            },
+            finish_reason: "stop",
+            logprobs: null,
+          },
+        ],
+      }
+
+      const geminiChunk = translateOpenAIToGemini(openAIChunk)
+
+      expect(geminiChunk.candidates).toHaveLength(1)
+      expect(geminiChunk.candidates[0].content.parts[0]).toEqual({
+        text: "Hello",
+      })
+      expect(geminiChunk.candidates[0].finishReason).toBe("STOP")
+    })
+
+    test("should handle streaming response with tool calls", () => {
+      const openAIChunk: ChatCompletionChunk = {
+        id: "chatcmpl-123",
+        object: "chat.completion.chunk",
+        created: 1234567890,
+        model: "gemini-2.5-pro",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_123",
+                  type: "function",
+                  function: {
+                    name: "getWeather",
+                    arguments: '{"location":"SF"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+            logprobs: null,
+          },
+        ],
+      }
+
+      const geminiChunk = translateOpenAIToGemini(openAIChunk)
+
+      expect(geminiChunk.candidates).toHaveLength(1)
+      expect(geminiChunk.candidates[0].content.parts).toHaveLength(1)
+      expect(geminiChunk.candidates[0].content.parts[0]).toEqual({
+        functionCall: {
+          name: "getWeather",
+          args: { location: "SF" },
+        },
+      })
+      expect(geminiChunk.candidates[0].finishReason).toBe("STOP")
+    })
+  })
 })

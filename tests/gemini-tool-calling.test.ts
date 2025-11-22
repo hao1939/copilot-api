@@ -801,10 +801,11 @@ describe("Gemini Tool Calling Translation", () => {
 
       const toolCall = assistantMessage?.tool_calls?.[0]
 
-      // Should have name at tool_call level (for Gemini model compatibility)
-      expect(toolCall).toHaveProperty("name", "list_directory")
+      // Should NOT have name at tool_call level (GitHub Copilot rejects this field)
+      // During debugging we confirmed GitHub Copilot returns "invalid request body" if name is present
+      expect(toolCall).not.toHaveProperty("name")
 
-      // Should also have name in function object (OpenAI standard)
+      // Should have name in function object (OpenAI standard)
       expect(toolCall?.function).toHaveProperty("name", "list_directory")
     })
   })

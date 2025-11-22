@@ -7,7 +7,11 @@ describe("Error Handling", () => {
   describe("HTTPError class", () => {
     test("should store response and optional responseBody", () => {
       const mockResponse = new Response("Error body", { status: 400 })
-      const error = new HTTPError("Test error", mockResponse, "Cached error body")
+      const error = new HTTPError(
+        "Test error",
+        mockResponse,
+        "Cached error body",
+      )
 
       expect(error.message).toBe("Test error")
       expect(error.response).toBe(mockResponse)
@@ -55,7 +59,9 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: { message: string; status: number; statusText: string }
+      }
 
       expect(response.status).toBe(400)
       expect(body.error.message).toContain("Original error")
@@ -75,7 +81,9 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: { message: string; status: number; statusText: string }
+      }
 
       expect(response.status).toBe(500)
       expect(body.error.message).toContain("GitHub Copilot error")
@@ -91,7 +99,9 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: { message: string; type: string; stack?: string }
+      }
 
       expect(response.status).toBe(500)
       expect(body.error.message).toBe("Regular error message")
@@ -107,7 +117,9 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: { message: string; type: string }
+      }
 
       expect(response.status).toBe(500)
       expect(body.error.message).toBe("String error")
@@ -136,7 +148,9 @@ describe("Error Handling", () => {
         })
 
         const response = await testApp.request(`/test`)
-        const body = await response.json()
+        const body = (await response.json()) as {
+          error: { status: number }
+        }
 
         expect(response.status).toBe(statusCode)
         expect(body.error.status).toBe(statusCode)
@@ -155,7 +169,9 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: { message: string; status: number }
+      }
 
       expect(response.status).toBe(400)
       expect(body.error.message).toBe("Not valid JSON")
@@ -186,7 +202,14 @@ describe("Error Handling", () => {
       })
 
       const response = await app.request("/test")
-      const body = await response.json()
+      const body = (await response.json()) as {
+        error: {
+          message: string
+          status: number
+          statusText: string
+          type: string
+        }
+      }
 
       expect(response.status).toBe(400)
       expect(body.error.message).toContain("invalid request body")
@@ -203,7 +226,11 @@ describe("Error Handling", () => {
         JSON.stringify({ error: { message: "Test" } }),
         { status: 400 },
       )
-      const error = new HTTPError("Test", mockResponse, JSON.stringify({ error: { message: "Test" } }))
+      const error = new HTTPError(
+        "Test",
+        mockResponse,
+        JSON.stringify({ error: { message: "Test" } }),
+      )
 
       app.get("/test", async (c) => {
         return forwardError(c, error)

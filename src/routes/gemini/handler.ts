@@ -157,33 +157,85 @@ export async function handleGenerateContent(c: Context) {
       consola.info(`Stream complete. Total events: ${eventCount}`)
     })
   } catch (error) {
+    consola.error("=== ERROR CAUGHT IN HANDLER ===")
     consola.error("Error processing request:", error)
+    consola.error("Error type:", error?.constructor?.name)
+    consola.error("Error message:", error instanceof Error ? error.message : String(error))
+
+    // Log stack trace if available
+    if (error instanceof Error && error.stack) {
+      consola.error("Error stack trace:", error.stack)
+    }
 
     // If it's an HTTPError from Copilot, get more details
     if (error instanceof Error && "response" in error) {
-      const httpError = error as { response: Response; message: string }
-      try {
-        const errorBody = await httpError.response.clone().text()
-        consola.error("Copilot API error body:", errorBody)
-        return c.json(
-          {
-            error: {
-              message: `Copilot API error: ${errorBody}`,
-              code: httpError.response.status,
+      const httpError = error as { response: Response; message: string; responseBody?: string }
+
+      // Try to use cached responseBody first (from HTTPError)
+      let errorBody: string
+      if ("responseBody" in httpError && typeof httpError.responseBody === "string") {
+        errorBody = httpError.responseBody
+        consola.error("Copilot API error body (from HTTPError):", errorBody)
+      } else {
+        // Try to read from response
+        try {
+          errorBody = await httpError.response.clone().text()
+          consola.error("Copilot API error body (from response):", errorBody)
+        } catch (readError) {
+          // Fallback if we can't read the response body
+          consola.error("Could not read Copilot API error body:", readError)
+          if (readError instanceof Error && readError.stack) {
+            consola.error("Read error stack:", readError.stack)
+          }
+
+          // Return error with status but without body
+          consola.error("Copilot API status:", httpError.response.status)
+          return c.json(
+            {
+              error: {
+                message: `Copilot API error (status ${httpError.response.status}): ${httpError.message}`,
+                code: httpError.response.status,
+                status: httpError.response.status,
+              },
             },
-          },
-          httpError.response.status,
-        )
-      } catch {
-        // Fallback if we can't read the response body
+            httpError.response.status,
+          )
+        }
       }
+
+      // Try to parse the error body as JSON to get structured error
+      let errorDetails: unknown
+      try {
+        errorDetails = JSON.parse(errorBody)
+      } catch {
+        errorDetails = errorBody
+      }
+
+      consola.error("Copilot API status:", httpError.response.status)
+      consola.error("Copilot API error details:", errorDetails)
+
+      // Return the original error to the client for better debugging
+      return c.json(
+        {
+          error: {
+            message: `Copilot API error: ${errorBody}`,
+            code: httpError.response.status,
+            status: httpError.response.status,
+            details: errorDetails, // Include parsed error details
+          },
+        },
+        httpError.response.status,
+      )
     }
 
+    // For non-HTTP errors, include stack trace for debugging
+    const errorStack = error instanceof Error ? error.stack : undefined
     return c.json(
       {
         error: {
           message: error instanceof Error ? error.message : "Internal error",
           code: 500,
+          stack: errorStack,
         },
       },
       500,

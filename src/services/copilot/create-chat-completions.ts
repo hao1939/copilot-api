@@ -70,7 +70,8 @@ export const createChatCompletions = async (
       })
     }
 
-    throw new HTTPError("Failed to create chat completions", response)
+    // Pass the error body to HTTPError so it can be forwarded without re-reading
+    throw new HTTPError("Failed to create chat completions", response, errorBody)
   }
 
   if (payload.stream) {

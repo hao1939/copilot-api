@@ -103,10 +103,9 @@ export function validateSchemaForStrictMode(
       const properties = schemaObj.properties as Record<string, unknown>
       for (const requiredField of schemaObj.required) {
         if (
-          typeof requiredField === "string"
-          && (!properties
-            || typeof properties !== "object"
-            || !(requiredField in properties))
+          !properties
+          || typeof properties !== "object"
+          || !(requiredField in properties)
         ) {
           errors.push({
             path,

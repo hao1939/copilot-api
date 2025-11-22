@@ -1,4 +1,4 @@
-# AGENTS.md
+# Contributing Guide
 
 ## Build, Lint, and Test Commands
 

@@ -50,7 +50,8 @@ export function translateGeminiToOpenAI(
 
   // GitHub Copilot does not accept conversations ending with a tool message
   // If the last message is a tool message, append a dummy user message
-  if (messages.length > 0 && messages.at(-1).role === "tool") {
+  const lastMessage = messages.at(-1)
+  if (lastMessage && lastMessage.role === "tool") {
     messages.push({
       role: "user",
       content: "Please continue with the next step.",
@@ -444,7 +445,7 @@ export function translateOpenAIToGemini(
     && response.choices[0]
     && "delta" in response.choices[0]
   ) {
-    const chunk = response as ChatCompletionChunk
+    const chunk = response as unknown as ChatCompletionChunk
     return translateChunkToGemini(chunk)
   }
 

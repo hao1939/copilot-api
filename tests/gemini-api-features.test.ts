@@ -8,7 +8,6 @@ describe("Gemini API Features", () => {
   test("should translate systemInstruction to OpenAI system message", () => {
     const geminiPayload: GeminiGenerateContentPayload = {
       systemInstruction: {
-        role: "system",
         parts: [
           {
             text: "You are a helpful assistant specialized in coding.",
@@ -38,7 +37,6 @@ describe("Gemini API Features", () => {
   test("should translate systemInstruction with multiple text parts", () => {
     const geminiPayload: GeminiGenerateContentPayload = {
       systemInstruction: {
-        role: "system",
         parts: [
           { text: "You are a helpful assistant." },
           { text: "You specialize in coding." },
@@ -129,7 +127,7 @@ describe("Gemini API Features", () => {
 
     const content = openAIPayload.messages[0].content as Array<{
       type: string
-      [key: string]: unknown
+      image_url: { url: string }
     }>
     expect(content).toHaveLength(2)
     expect(content[0].type).toBe("text")

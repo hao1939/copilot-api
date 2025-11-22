@@ -96,12 +96,15 @@ export async function handleGenerateContent(c: Context) {
 
 function handleGeminiStream(
   c: Context,
-  response: AsyncIterable<{ data: string }>,
+  response: AsyncIterable<{ data?: string }>,
 ) {
   return streamSSE(c, async (stream) => {
     let lastFinishReason: string | undefined
 
     for await (const rawEvent of response) {
+      if (!rawEvent.data) {
+        continue
+      }
       if (rawEvent.data === "[DONE]") {
         // CRITICAL: Send a final completion chunk to signal stream end
         // The Gemini CLI client waits for a chunk with finishReason set

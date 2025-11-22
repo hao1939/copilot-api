@@ -18,7 +18,7 @@ describe("Gemini API endpoint tests", () => {
     )
 
     expect(res.status).toBe(400)
-    const body = await res.json()
+    const body = (await res.json()) as { error: { message: string } }
     expect(body.error).toBeDefined()
     expect(body.error.message).toContain("contents")
   })
@@ -34,7 +34,7 @@ describe("Gemini API endpoint tests", () => {
     )
 
     expect(res.status).toBe(400)
-    const body = await res.json()
+    const body = (await res.json()) as { error: unknown }
     expect(body.error).toBeDefined()
   })
 
@@ -144,7 +144,7 @@ describe("Gemini API endpoint tests", () => {
       })
 
       expect(res.status).toBe(400)
-      const body = await res.json()
+      const body = (await res.json()) as { error: { message: string } }
       expect(body.error).toBeDefined()
       expect(body.error.message).toContain("Unsupported model")
       expect(body.error.message).toContain("gemini-2.5-pro")

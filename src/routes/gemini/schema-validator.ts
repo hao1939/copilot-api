@@ -102,11 +102,7 @@ export function validateSchemaForStrictMode(
     if (Array.isArray(schemaObj.required)) {
       const properties = schemaObj.properties as Record<string, unknown>
       for (const requiredField of schemaObj.required) {
-        if (
-          !properties
-          || typeof properties !== "object"
-          || !(requiredField in properties)
-        ) {
+        if (typeof properties !== "object" || !(requiredField in properties)) {
           errors.push({
             path,
             message: `Required field "${requiredField}" not found in properties`,

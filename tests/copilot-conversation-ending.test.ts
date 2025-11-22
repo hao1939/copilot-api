@@ -155,12 +155,16 @@ describe("GitHub Copilot conversation ending requirements", () => {
 
     // Should append user message since last message is tool response
     const lastMessage = openAIPayload.messages.at(-1)
-    expect(lastMessage.role).toBe("user")
-    expect(lastMessage.content).toBe("Please continue with the next step.")
+    if (lastMessage) {
+      expect(lastMessage.role).toBe("user")
+      expect(lastMessage.content).toBe("Please continue with the next step.")
+    }
 
     // Second to last should be tool
     const secondLast = openAIPayload.messages.at(-2)
-    expect(secondLast.role).toBe("tool")
+    if (secondLast) {
+      expect(secondLast.role).toBe("tool")
+    }
   })
 
   test("should preserve consecutive user messages (GitHub Copilot supports this)", () => {

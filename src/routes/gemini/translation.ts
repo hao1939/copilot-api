@@ -105,7 +105,10 @@ function translateGeminiContentsToOpenAI(
   }
 
   // Second pass: Translate contents, matching function responses to call IDs
-  let toolCallIdIndex = 0
+  // We maintain a queue of pending tool calls that are awaiting responses
+  type PendingToolCall = { id: string; name: string }
+  const pendingToolCalls: Array<PendingToolCall> = []
+  let callIdIndex = 0 // Tracks which ID to assign to function calls
 
   for (const content of contents) {
     const role = translateGeminiRoleToOpenAI(content.role)
@@ -123,8 +126,15 @@ function translateGeminiContentsToOpenAI(
 
       // Use the pre-generated IDs from the queue
       const toolCalls = functionCalls.map((fc) => {
-        const id = toolCallIdQueue[toolCallIdIndex]
-        toolCallIdIndex++
+        const id = toolCallIdQueue[callIdIndex]
+        const toolCall = {
+          id,
+          name: fc.functionCall.name,
+        }
+
+        // Add to pending queue - these are awaiting responses
+        pendingToolCalls.push(toolCall)
+        callIdIndex++
 
         return {
           id,
@@ -147,7 +157,6 @@ function translateGeminiContentsToOpenAI(
       // Gemini-CLI sometimes sends duplicate functionResponse entries with the same ID
       // which would create invalid OpenAI conversation format (multiple tool messages for one tool call)
       const seenIds = new Set<string>()
-      let responseIndex = 0
 
       for (const fr of functionResponses) {
         const responseId = fr.functionResponse.id
@@ -161,18 +170,24 @@ function translateGeminiContentsToOpenAI(
           seenIds.add(responseId)
         }
 
-        // Use the corresponding tool_call ID from when we translated the function call
-        // We match responses to calls in order
-        const queueIndex =
-          toolCallIdIndex - functionResponses.length + responseIndex
-        const toolCallId = toolCallIdQueue[queueIndex]
-        responseIndex++
+        // Check if we have a pending tool call for this response
+        // If no pending calls, this is an orphaned response - skip it
+        if (pendingToolCalls.length === 0) {
+          continue
+        }
 
-        messages.push({
-          role: "tool",
-          tool_call_id: toolCallId,
-          content: JSON.stringify(fr.functionResponse.response),
-        })
+        // Match response to the next pending call
+        // IMPORTANT: We match in FIFO order - responses must come in the same order as calls
+        const pendingCall = pendingToolCalls.shift()
+
+        if (pendingCall) {
+          messages.push({
+            role: "tool",
+            name: fr.functionResponse.name,
+            tool_call_id: pendingCall.id,
+            content: JSON.stringify(fr.functionResponse.response),
+          })
+        }
       }
     } else {
       // Regular message
@@ -278,17 +293,15 @@ function addAdditionalPropertiesFalse(
       result.items = addAdditionalPropertiesFalse(
         value as Record<string, unknown>,
       )
-    } else if (Array.isArray(value)) {
-      // Deep clone arrays - important for enum, required, etc.
-      result[key] = [...(value as Array<unknown>)]
-    } else if (typeof value === "object" && value !== null) {
-      // For other nested objects, recursively process them too
-      // This handles cases like nested schemas that aren't in properties/items
+    } else if (
+      typeof value === "object"
+      && value !== null
+      && !Array.isArray(value)
+    ) {
       result[key] = addAdditionalPropertiesFalse(
         value as Record<string, unknown>,
       )
     } else {
-      // Copy primitives directly
       result[key] = value
     }
   }
@@ -325,17 +338,16 @@ function translateGeminiToolsToOpenAI(
         let parameters = f.parametersJsonSchema || f.parameters
 
         // If empty or missing, provide a minimal valid schema
-        if (!parameters || Object.keys(parameters).length === 0) {
-          parameters = {
-            type: "object",
-            properties: {},
-            additionalProperties: false,
-          }
-        } else {
-          // Recursively add additionalProperties: false for strict mode compliance
-          // The function performs a deep clone and ensures ALL object schemas get the field
-          parameters = addAdditionalPropertiesFalse(parameters)
-        }
+        parameters =
+          !parameters || Object.keys(parameters).length === 0 ?
+            {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            }
+            // Recursively add additionalProperties: false for strict mode compliance
+            // The function performs a deep clone and ensures ALL object schemas get the field
+          : addAdditionalPropertiesFalse(parameters)
 
         openAITools.push({
           type: "function",
@@ -456,6 +468,7 @@ function translateChunkToGemini(
   chunk: ChatCompletionChunk,
 ): GeminiGenerateContentResponse {
   const choice = chunk.choices[0]
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (!choice) {
     // Empty chunk
     return {
@@ -575,6 +588,7 @@ function translateOpenAIFinishReasonToGemini(
   | "OTHER"
   | undefined {
   // Handle null or undefined (streaming in progress) using == to catch both
+  // eslint-disable-next-line eqeqeq
   if (finishReason == null) {
     return undefined
   }

@@ -49,7 +49,7 @@ export function initProxyFromEnv(): void {
     }
 
     setGlobalDispatcher(dispatcher as unknown as Dispatcher)
-  } catch (err) {
+  } catch {
     // Proxy setup skipped
   }
 }

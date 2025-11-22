@@ -1,5 +1,3 @@
-import consola from "consola"
-
 import type {
   ChatCompletionChunk,
   ChatCompletionResponse,
@@ -16,6 +14,7 @@ import type {
   GeminiGenerateContentResponse,
   GeminiPart,
 } from "./gemini-types"
+
 import {
   isFunctionCallPart,
   isFunctionResponsePart,
@@ -43,8 +42,6 @@ export function translateGeminiToOpenAI(
   if (tools && tools.length > 0) {
     const validation = validateToolsForStrictMode(tools)
     if (!validation.valid) {
-      consola.error("Tool validation failed:")
-      consola.error(formatValidationErrors(validation.errors))
       throw new Error(
         `Invalid tool schema for OpenAI strict mode:\n${formatValidationErrors(validation.errors)}`,
       )
@@ -53,7 +50,7 @@ export function translateGeminiToOpenAI(
 
   // GitHub Copilot does not accept conversations ending with a tool message
   // If the last message is a tool message, append a dummy user message
-  if (messages.length > 0 && messages[messages.length - 1].role === "tool") {
+  if (messages.length > 0 && messages.at(-1).role === "tool") {
     messages.push({
       role: "user",
       content: "Please continue with the next step.",
@@ -92,15 +89,14 @@ function translateGeminiContentsToOpenAI(
 
   // First pass: Build a queue of tool_call IDs that we generate for function calls
   // This allows us to match function responses to their corresponding calls
-  const toolCallIdQueue: string[] = []
-  let globalCallIndex = 0  // Global counter across all function calls
+  const toolCallIdQueue: Array<string> = []
+  let globalCallIndex = 0 // Global counter across all function calls
 
   for (const content of contents) {
-    const functionCalls = content.parts.filter(isFunctionCallPart)
+    const functionCalls = content.parts.filter((p) => isFunctionCallPart(p))
     if (functionCalls.length > 0) {
       // Generate IDs for all function calls in this content
-      for (let i = 0; i < functionCalls.length; i++) {
-        const fc = functionCalls[i]
+      for (const fc of functionCalls) {
         const id = `call_${fc.functionCall.name}_${Date.now()}_${globalCallIndex}`
         toolCallIdQueue.push(id)
         globalCallIndex++
@@ -115,16 +111,18 @@ function translateGeminiContentsToOpenAI(
     const role = translateGeminiRoleToOpenAI(content.role)
 
     // Check if this content has function calls or responses
-    const functionCalls = content.parts.filter(isFunctionCallPart)
-    const functionResponses = content.parts.filter(isFunctionResponsePart)
+    const functionCalls = content.parts.filter((p) => isFunctionCallPart(p))
+    const functionResponses = content.parts.filter((p) =>
+      isFunctionResponsePart(p),
+    )
 
     if (functionCalls.length > 0) {
       // Assistant message with tool calls
-      const textParts = content.parts.filter(isTextPart)
+      const textParts = content.parts.filter((p) => isTextPart(p))
       const textContent = textParts.map((p) => p.text).join("\n\n") || null
 
       // Use the pre-generated IDs from the queue
-      const toolCalls = functionCalls.map((fc, idx) => {
+      const toolCalls = functionCalls.map((fc) => {
         const id = toolCallIdQueue[toolCallIdIndex]
         toolCallIdIndex++
 
@@ -165,7 +163,8 @@ function translateGeminiContentsToOpenAI(
 
         // Use the corresponding tool_call ID from when we translated the function call
         // We match responses to calls in order
-        const queueIndex = toolCallIdIndex - functionResponses.length + responseIndex
+        const queueIndex =
+          toolCallIdIndex - functionResponses.length + responseIndex
         const toolCallId = toolCallIdQueue[queueIndex]
         responseIndex++
 
@@ -191,15 +190,14 @@ function translateGeminiContentsToOpenAI(
 function translateGeminiRoleToOpenAI(
   role?: "user" | "model",
 ): "user" | "assistant" | "system" {
-  if (role === "model") return "assistant"
-  return role ?? "user"
+  return role === "model" ? "assistant" : (role ?? "user")
 }
 
 function translateGeminiPartsToOpenAI(
   parts: Array<GeminiPart>,
 ): string | Array<ContentPart> | null {
   // Check if there are any images
-  const hasImage = parts.some(isInlineDataPart)
+  const hasImage = parts.some((p) => isInlineDataPart(p))
 
   if (!hasImage) {
     // Text only - return as string
@@ -227,7 +225,7 @@ function translateGeminiPartsToOpenAI(
 
 function extractTextFromParts(parts: Array<GeminiPart>): string {
   return parts
-    .filter(isTextPart)
+    .filter((p) => isTextPart(p))
     .map((p) => p.text)
     .join("\n\n")
 }
@@ -252,23 +250,43 @@ function addAdditionalPropertiesFalse(
       const properties = value as Record<string, unknown>
       result.properties = Object.fromEntries(
         Object.entries(properties).map(([propKey, propValue]) => {
-          if (typeof propValue === "object" && propValue !== null && !Array.isArray(propValue)) {
-            return [propKey, addAdditionalPropertiesFalse(propValue as Record<string, unknown>)]
+          if (
+            typeof propValue === "object"
+            && propValue !== null
+            && !Array.isArray(propValue)
+          ) {
+            return [
+              propKey,
+              addAdditionalPropertiesFalse(
+                propValue as Record<string, unknown>,
+              ),
+            ]
           }
-          // For arrays and primitives, clone them
-          return [propKey, Array.isArray(propValue) ? [...propValue] : propValue]
+          if (Array.isArray(propValue)) {
+            return [propKey, [...(propValue as Array<unknown>)]]
+          }
+          return [propKey, propValue]
         }),
       )
-    } else if (key === "items" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    } else if (
+      key === "items"
+      && typeof value === "object"
+      && value !== null
+      && !Array.isArray(value)
+    ) {
       // Recursively process array item schemas
-      result.items = addAdditionalPropertiesFalse(value as Record<string, unknown>)
+      result.items = addAdditionalPropertiesFalse(
+        value as Record<string, unknown>,
+      )
     } else if (Array.isArray(value)) {
       // Deep clone arrays - important for enum, required, etc.
-      result[key] = [...value]
+      result[key] = [...(value as Array<unknown>)]
     } else if (typeof value === "object" && value !== null) {
       // For other nested objects, recursively process them too
       // This handles cases like nested schemas that aren't in properties/items
-      result[key] = addAdditionalPropertiesFalse(value as Record<string, unknown>)
+      result[key] = addAdditionalPropertiesFalse(
+        value as Record<string, unknown>,
+      )
     } else {
       // Copy primitives directly
       result[key] = value
@@ -335,9 +353,9 @@ function translateGeminiToolsToOpenAI(
   return openAITools.length > 0 ? openAITools : undefined
 }
 
-function translateGeminiToolConfigToOpenAI(
-  toolConfig?: { functionCallingConfig?: { mode?: string } },
-): ChatCompletionsPayload["tool_choice"] {
+function translateGeminiToolConfigToOpenAI(toolConfig?: {
+  functionCallingConfig?: { mode?: string }
+}): ChatCompletionsPayload["tool_choice"] {
   if (!toolConfig?.functionCallingConfig) return undefined
 
   const mode = toolConfig.functionCallingConfig.mode
@@ -358,12 +376,10 @@ function translateGeminiToolConfigToOpenAI(
   }
 }
 
-function translateGeminiResponseFormatToOpenAI(
-  generationConfig?: {
-    responseMimeType?: string
-    responseSchema?: Record<string, unknown>
-  },
-): ChatCompletionsPayload["response_format"] {
+function translateGeminiResponseFormatToOpenAI(generationConfig?: {
+  responseMimeType?: string
+  responseSchema?: Record<string, unknown>
+}): ChatCompletionsPayload["response_format"] {
   if (!generationConfig) return undefined
 
   const { responseMimeType, responseSchema } = generationConfig
@@ -373,8 +389,8 @@ function translateGeminiResponseFormatToOpenAI(
 
   // If only responseMimeType is set to JSON (without schema), use json_object mode
   if (
-    responseMimeType === "application/json" &&
-    (!responseSchema || Object.keys(responseSchema).length === 0)
+    responseMimeType === "application/json"
+    && (!responseSchema || Object.keys(responseSchema).length === 0)
   ) {
     return { type: "json_object" }
   }
@@ -401,32 +417,27 @@ function translateGeminiResponseFormatToOpenAI(
 
 // Response translation: OpenAI → Gemini
 
-// Overload for complete response
-export function translateOpenAIToGemini(
-  response: ChatCompletionResponse,
-): GeminiGenerateContentResponse
-// Overload for streaming chunk
-export function translateOpenAIToGemini(
-  chunk: ChatCompletionChunk,
-): GeminiGenerateContentResponse
-// Implementation
 export function translateOpenAIToGemini(
   response: ChatCompletionResponse | ChatCompletionChunk,
 ): GeminiGenerateContentResponse {
   // Handle streaming chunks
-  if ("object" in response && response.object === "chat.completion.chunk") {
-    const chunk = response as ChatCompletionChunk
+  if (response.object === "chat.completion.chunk") {
+    const chunk = response
     return translateChunkToGemini(chunk)
   }
 
   // Check if this is actually a chunk by looking for delta instead of message
-  if ("choices" in response && response.choices[0] && "delta" in response.choices[0]) {
+  if (
+    "choices" in response
+    && response.choices[0]
+    && "delta" in response.choices[0]
+  ) {
     const chunk = response as ChatCompletionChunk
     return translateChunkToGemini(chunk)
   }
 
   // Handle complete responses
-  const completeResponse = response as ChatCompletionResponse
+  const completeResponse = response
   return {
     candidates: completeResponse.choices.map((choice) =>
       translateChoiceToCandidate(choice),
@@ -472,8 +483,12 @@ function translateChunkToGemini(
         parts.push({
           functionCall: {
             name: toolCall.function.name,
-            args: toolCall.function.arguments
-              ? JSON.parse(toolCall.function.arguments)
+            args:
+              toolCall.function.arguments ?
+                (JSON.parse(toolCall.function.arguments) as Record<
+                  string,
+                  unknown
+                >)
               : {},
           },
         })
@@ -488,16 +503,15 @@ function translateChunkToGemini(
           role: "model",
           parts,
         },
-        finishReason: translateOpenAIFinishReasonToGemini(
-          choice.finish_reason,
-        ),
+        finishReason: translateOpenAIFinishReasonToGemini(choice.finish_reason),
       },
     ],
-    usageMetadata: chunk.usage
-      ? {
-          promptTokenCount: chunk.usage.prompt_tokens ?? 0,
-          candidatesTokenCount: chunk.usage.completion_tokens ?? 0,
-          totalTokenCount: chunk.usage.total_tokens ?? 0,
+    usageMetadata:
+      chunk.usage ?
+        {
+          promptTokenCount: chunk.usage.prompt_tokens,
+          candidatesTokenCount: chunk.usage.completion_tokens,
+          totalTokenCount: chunk.usage.total_tokens,
           cachedContentTokenCount:
             chunk.usage.prompt_tokens_details?.cached_tokens,
         }
@@ -530,7 +544,9 @@ function translateChoiceToCandidate(
     }
   }
 
-  const geminiFinishReason = translateOpenAIFinishReasonToGemini(choice.finish_reason)
+  const geminiFinishReason = translateOpenAIFinishReasonToGemini(
+    choice.finish_reason,
+  )
 
   return {
     content: {
@@ -552,7 +568,9 @@ function translateOpenAIFinishReasonToGemini(
   | "OTHER"
   | undefined {
   switch (finishReason) {
-    case "stop": {
+    case "stop":
+    case "tool_calls": {
+      // Both regular stop and tool_calls completion are considered STOP in Gemini
       return "STOP"
     }
     case "length": {
@@ -561,16 +579,8 @@ function translateOpenAIFinishReasonToGemini(
     case "content_filter": {
       return "SAFETY"
     }
-    case "tool_calls": {
-      // When response includes tool calls, Gemini expects STOP finish reason
-      return "STOP"
-    }
     case null: {
       // null finish_reason during streaming - don't set a finish reason yet
-      return undefined
-    }
-    case undefined: {
-      // undefined finish_reason - streaming in progress
       return undefined
     }
     default: {

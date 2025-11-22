@@ -123,7 +123,9 @@ describe("Gemini to OpenAI translation logic", () => {
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
     expect(openAIPayload.messages).toHaveLength(3) // system + user + assistant
     expect(openAIPayload.messages[0].role).toBe("system")
-    expect(openAIPayload.messages[0].content).toBe("You are a helpful assistant.")
+    expect(openAIPayload.messages[0].content).toBe(
+      "You are a helpful assistant.",
+    )
     expect(openAIPayload.temperature).toBe(0.7)
     expect(openAIPayload.max_tokens).toBe(150)
     expect(openAIPayload.top_p).toBe(1)
@@ -580,12 +582,12 @@ describe("OpenAI to Gemini response translation", () => {
       const openAIPayload = translateGeminiToOpenAI(geminiPayload)
 
       // Should append user message since last message is tool response
-      const lastMessage = openAIPayload.messages[openAIPayload.messages.length - 1]
+      const lastMessage = openAIPayload.messages.at(-1)
       expect(lastMessage.role).toBe("user")
       expect(lastMessage.content).toBe("Please continue with the next step.")
 
       // Second to last should be tool
-      const secondLast = openAIPayload.messages[openAIPayload.messages.length - 2]
+      const secondLast = openAIPayload.messages.at(-2)
       expect(secondLast.role).toBe("tool")
     })
 

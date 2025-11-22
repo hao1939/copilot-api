@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test"
+
 import type { GeminiGenerateContentPayload } from "~/routes/gemini/gemini-types"
-import { translateGeminiToOpenAI, translateOpenAIToGemini } from "~/routes/gemini/translation"
 import type { ChatCompletionResponse } from "~/services/copilot/create-chat-completions"
+
+import {
+  translateGeminiToOpenAI,
+  translateOpenAIToGemini,
+} from "~/routes/gemini/translation"
 
 describe("Gemini Tool Calling Translation", () => {
   describe("Tool Call ID Matching", () => {
@@ -111,7 +116,9 @@ describe("Gemini Tool Calling Translation", () => {
 
       const toolCallIds = assistantMessage?.tool_calls?.map((tc) => tc.id)
 
-      const toolMessages = openAIPayload.messages.filter((m) => m.role === "tool")
+      const toolMessages = openAIPayload.messages.filter(
+        (m) => m.role === "tool",
+      )
       expect(toolMessages.length).toBe(2)
 
       // Verify IDs match in order
@@ -187,13 +194,19 @@ describe("Gemini Tool Calling Translation", () => {
       )
       expect(assistantMessages.length).toBe(2)
 
-      const toolMessages = openAIPayload.messages.filter((m) => m.role === "tool")
+      const toolMessages = openAIPayload.messages.filter(
+        (m) => m.role === "tool",
+      )
       expect(toolMessages.length).toBe(2)
 
       // First turn IDs should match
-      expect(toolMessages[0].tool_call_id).toBe(assistantMessages[0]?.tool_calls?.[0].id)
+      expect(toolMessages[0].tool_call_id).toBe(
+        assistantMessages[0]?.tool_calls?.[0].id,
+      )
       // Second turn IDs should match
-      expect(toolMessages[1].tool_call_id).toBe(assistantMessages[1]?.tool_calls?.[0].id)
+      expect(toolMessages[1].tool_call_id).toBe(
+        assistantMessages[1]?.tool_calls?.[0].id,
+      )
     })
   })
 
@@ -241,7 +254,9 @@ describe("Gemini Tool Calling Translation", () => {
 
       const openAIPayload = translateGeminiToOpenAI(geminiPayload)
 
-      const toolMessages = openAIPayload.messages.filter((m) => m.role === "tool")
+      const toolMessages = openAIPayload.messages.filter(
+        (m) => m.role === "tool",
+      )
 
       // Should only have ONE tool message despite two responses
       expect(toolMessages.length).toBe(1)
@@ -295,7 +310,9 @@ describe("Gemini Tool Calling Translation", () => {
 
       const openAIPayload = translateGeminiToOpenAI(geminiPayload)
 
-      const toolMessages = openAIPayload.messages.filter((m) => m.role === "tool")
+      const toolMessages = openAIPayload.messages.filter(
+        (m) => m.role === "tool",
+      )
 
       // Should have BOTH tool messages
       expect(toolMessages.length).toBe(2)
@@ -383,7 +400,10 @@ describe("Gemini Tool Calling Translation", () => {
       expect(params).toHaveProperty("additionalProperties", false)
 
       // Nested config object should have it
-      expect(params.properties.config).toHaveProperty("additionalProperties", false)
+      expect(params.properties.config).toHaveProperty(
+        "additionalProperties",
+        false,
+      )
 
       // Deeply nested settings object should have it
       expect(params.properties.config.properties.settings).toHaveProperty(
@@ -517,7 +537,9 @@ describe("Gemini Tool Calling Translation", () => {
 
       // Verify only INPUT parameters are included (not responseJsonSchema)
       expect(openAIPayload.tools?.[0].function.parameters).toBeDefined()
-      expect(openAIPayload.tools?.[0].function.parameters.properties.todos).toBeDefined()
+      expect(
+        openAIPayload.tools?.[0].function.parameters.properties.todos,
+      ).toBeDefined()
 
       // Verify responseJsonSchema is NOT in the translated output
       const toolFunction = openAIPayload.tools?.[0].function as any
@@ -653,18 +675,25 @@ describe("Gemini Tool Calling Translation", () => {
       expect(params.properties.level1.additionalProperties).toBe(false)
 
       // Level 2 nested object must have it
-      expect(params.properties.level1.properties.level2.additionalProperties).toBe(false)
+      expect(
+        params.properties.level1.properties.level2.additionalProperties,
+      ).toBe(false)
 
       // Level 3 nested object must have it
-      expect(params.properties.level1.properties.level2.properties.level3.additionalProperties).toBe(
-        false,
-      )
+      expect(
+        params.properties.level1.properties.level2.properties.level3
+          .additionalProperties,
+      ).toBe(false)
 
       // Sibling object at level 2 must have it
-      expect(params.properties.level1.properties.siblingObject.additionalProperties).toBe(false)
+      expect(
+        params.properties.level1.properties.siblingObject.additionalProperties,
+      ).toBe(false)
 
       // Array items that are objects must have it
-      expect(params.properties.arrayWithObjects.items.additionalProperties).toBe(false)
+      expect(
+        params.properties.arrayWithObjects.items.additionalProperties,
+      ).toBe(false)
     })
   })
 
@@ -705,9 +734,12 @@ describe("Gemini Tool Calling Translation", () => {
       const geminiResponse = translateOpenAIToGemini(openAIResponse)
 
       expect(geminiResponse.candidates?.[0].content.parts).toHaveLength(1)
-      expect(geminiResponse.candidates?.[0].content.parts[0]).toHaveProperty("functionCall")
+      expect(geminiResponse.candidates?.[0].content.parts[0]).toHaveProperty(
+        "functionCall",
+      )
 
-      const functionCall = geminiResponse.candidates?.[0].content.parts[0] as any
+      const functionCall = geminiResponse.candidates?.[0].content
+        .parts[0] as any
       expect(functionCall.functionCall.name).toBe("list_directory")
       expect(functionCall.functionCall.args).toEqual({ dir_path: "." })
     })

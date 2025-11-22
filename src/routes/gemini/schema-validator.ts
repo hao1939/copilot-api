@@ -25,6 +25,7 @@ export interface ValidationResult {
 /**
  * Validates a JSON schema for OpenAI strict mode compliance.
  */
+// eslint-disable-next-line max-lines-per-function, complexity
 export function validateSchemaForStrictMode(
   schema: unknown,
   path: string = "root",
@@ -85,7 +86,7 @@ export function validateSchemaForStrictMode(
       })
     } else {
       // Validate properties
-      const properties = schemaObj.properties as Record<string, unknown>
+      const properties = schemaObj.properties
       if (typeof properties === "object" && properties !== null) {
         for (const [propKey, propValue] of Object.entries(properties)) {
           const propResult = validateSchemaForStrictMode(
@@ -119,7 +120,8 @@ export function validateSchemaForStrictMode(
 
   // Rule 3: Array types must have items
   if (schemaObj.type === "array") {
-    if (!("items" in schemaObj)) {
+    const items = schemaObj.items
+    if (items === undefined) {
       errors.push({
         path,
         message: 'Array type must have an "items" definition for strict mode',
@@ -127,10 +129,7 @@ export function validateSchemaForStrictMode(
       })
     } else {
       // Validate items schema
-      const itemsResult = validateSchemaForStrictMode(
-        schemaObj.items,
-        `${path}.items`,
-      )
+      const itemsResult = validateSchemaForStrictMode(items, `${path}.items`)
       errors.push(...itemsResult.errors)
     }
   }

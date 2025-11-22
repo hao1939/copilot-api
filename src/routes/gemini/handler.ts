@@ -1,6 +1,5 @@
 import type { Context } from "hono"
 
-import consola from "consola"
 import { streamSSE } from "hono/streaming"
 
 import { awaitApproval } from "~/lib/approval"
@@ -13,23 +12,29 @@ import {
 } from "~/services/copilot/create-chat-completions"
 
 import type { GeminiGenerateContentPayload } from "./gemini-types"
+
 import { translateGeminiToOpenAI, translateOpenAIToGemini } from "./translation"
 
 export async function handleGenerateContent(c: Context) {
   await checkRateLimit(state)
 
   let geminiPayload: GeminiGenerateContentPayload
-
   try {
     geminiPayload = await c.req.json<GeminiGenerateContentPayload>()
   } catch (error) {
-    consola.error("Failed to parse JSON request body:", error)
-    return c.json({ error: "Invalid JSON in request body" }, 400)
+    return c.json(
+      {
+        error: {
+          message: "Invalid JSON in request body",
+          code: 400,
+        },
+      },
+      400,
+    )
   }
 
   // Validate required fields
-  if (!geminiPayload.contents || !Array.isArray(geminiPayload.contents)) {
-    consola.error("Missing or invalid 'contents' field in request")
+  if (!Array.isArray(geminiPayload.contents)) {
     return c.json(
       {
         error: {
@@ -48,7 +53,6 @@ export async function handleGenerateContent(c: Context) {
   const model = modelMatch?.[1]
 
   if (!model) {
-    consola.error("Could not extract model from path:", path)
     return c.json({ error: "Model parameter is required" }, 400)
   }
 
@@ -56,7 +60,6 @@ export async function handleGenerateContent(c: Context) {
   const SUPPORTED_GEMINI_MODELS = ["gemini-2.5-pro", "gemini-3-pro-preview"]
 
   if (!SUPPORTED_GEMINI_MODELS.includes(model)) {
-    consola.error(`Unsupported Gemini model requested: ${model}`)
     return c.json(
       {
         error: {
@@ -71,142 +74,46 @@ export async function handleGenerateContent(c: Context) {
   // Detect if streaming is requested
   const isStreaming = path.includes("streamGenerateContent")
 
-  try {
-    const openAIPayload = translateGeminiToOpenAI(geminiPayload)
-    openAIPayload.model = model
-    openAIPayload.stream = isStreaming
+  const openAIPayload = translateGeminiToOpenAI(geminiPayload)
+  openAIPayload.model = model
+  openAIPayload.stream = isStreaming
 
-    if (state.manualApprove) {
-      await awaitApproval()
-    }
-
-    const response = await createChatCompletions(openAIPayload)
-
-    // Non-streaming response
-    if (isNonStreaming(response)) {
-      const geminiResponse = translateOpenAIToGemini(response)
-      return c.json(geminiResponse)
-    }
-
-    // Streaming response
-    return streamSSE(c, async (stream) => {
-      for await (const rawEvent of response) {
-        if (rawEvent.data === "[DONE]") {
-          break
-        }
-
-        if (!rawEvent.data) {
-          continue
-        }
-
-        try {
-          const chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
-          const geminiChunk = translateOpenAIToGemini(chunk)
-
-          // Send as SSE data event
-          await stream.writeSSE({
-            data: JSON.stringify(geminiChunk),
-          })
-        } catch (error) {
-          consola.error("Error parsing stream chunk:", error)
-        }
-      }
-    })
-  } catch (error) {
-    consola.error("=== ERROR CAUGHT IN HANDLER ===")
-    consola.error("Error processing request:", error)
-    consola.error("Error type:", error?.constructor?.name)
-    consola.error(
-      "Error message:",
-      error instanceof Error ? error.message : String(error),
-    )
-
-    // Log stack trace if available
-    if (error instanceof Error && error.stack) {
-      consola.error("Error stack trace:", error.stack)
-    }
-
-    // If it's an HTTPError from Copilot, get more details
-    if (error instanceof Error && "response" in error) {
-      const httpError = error as {
-        response: Response
-        message: string
-        responseBody?: string
-      }
-
-      // Try to use cached responseBody first (from HTTPError)
-      let errorBody: string
-      if (
-        "responseBody" in httpError
-        && typeof httpError.responseBody === "string"
-      ) {
-        errorBody = httpError.responseBody
-        consola.error("Copilot API error body (from HTTPError):", errorBody)
-      } else {
-        // Try to read from response
-        try {
-          errorBody = await httpError.response.clone().text()
-          consola.error("Copilot API error body (from response):", errorBody)
-        } catch (readError) {
-          // Fallback if we can't read the response body
-          consola.error("Could not read Copilot API error body:", readError)
-          if (readError instanceof Error && readError.stack) {
-            consola.error("Read error stack:", readError.stack)
-          }
-
-          // Return error with status but without body
-          consola.error("Copilot API status:", httpError.response.status)
-          return c.json(
-            {
-              error: {
-                message: `Copilot API error (status ${httpError.response.status}): ${httpError.message}`,
-                code: httpError.response.status,
-                status: httpError.response.status,
-              },
-            },
-            httpError.response.status,
-          )
-        }
-      }
-
-      // Try to parse the error body as JSON to get structured error
-      let errorDetails: unknown
-      try {
-        errorDetails = JSON.parse(errorBody)
-      } catch {
-        errorDetails = errorBody
-      }
-
-      consola.error("Copilot API status:", httpError.response.status)
-      consola.error("Copilot API error details:", errorDetails)
-
-      // Return the original error to the client for better debugging
-      return c.json(
-        {
-          error: {
-            message: `Copilot API error: ${errorBody}`,
-            code: httpError.response.status,
-            status: httpError.response.status,
-            details: errorDetails, // Include parsed error details
-          },
-        },
-        httpError.response.status,
-      )
-    }
-
-    // For non-HTTP errors, include stack trace for debugging
-    const errorStack = error instanceof Error ? error.stack : undefined
-    return c.json(
-      {
-        error: {
-          message: error instanceof Error ? error.message : "Internal error",
-          code: 500,
-          stack: errorStack,
-        },
-      },
-      500,
-    )
+  if (state.manualApprove) {
+    await awaitApproval()
   }
+
+  const response = await createChatCompletions(openAIPayload)
+
+  // Non-streaming response
+  if (isNonStreaming(response)) {
+    const geminiResponse = translateOpenAIToGemini(response)
+    return c.json(geminiResponse)
+  }
+
+  // Streaming response
+  return streamSSE(c, async (stream) => {
+    for await (const rawEvent of response) {
+      if (rawEvent.data === "[DONE]") {
+        break
+      }
+
+      if (!rawEvent.data) {
+        continue
+      }
+
+      try {
+        const chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
+        const geminiChunk = translateOpenAIToGemini(chunk)
+
+        // Send as SSE data event
+        await stream.writeSSE({
+          data: JSON.stringify(geminiChunk),
+        })
+      } catch {
+        // Ignore parsing errors in stream
+      }
+    }
+  })
 }
 
 const isNonStreaming = (
